@@ -1,0 +1,11 @@
+{
+  "name": "ZendeskDataIntegration",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "request": "latest",
+    "request-promise": "latest",
+    "mssql": "latest"
+  }
+}
