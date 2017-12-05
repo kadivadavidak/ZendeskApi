@@ -1,5 +1,6 @@
 var request = require("request-promise");
 var sql = require("mssql");
+var _ = require('lodash');
 
 var username = 'robby.barnes@springmobile.com/token'
 var password = 'xQAFlodg2Snmm6Eb0QU4BZslvg73cnX1DH0TvKeB'
@@ -52,30 +53,30 @@ function main(objectName, callback) {
 
             console.log(parents);
 
-        //     saveDataToDb(parents, "staging.Zendesk_" + objectName);
-        //     // console.log("parent: ", parents);
-        //     // console.log("via: ", via);
-        //     // console.log("via_source_from: ", via_source_from);
-        //     // console.log("via_source_to: ", via_source_to);
-        //     // console.log("custom_fields: ", custom_fields);
-        //     // console.log("fields: ", fields);
+            saveDataToDb(parents, "staging.Zendesk_" + objectName);
+            // console.log("parent: ", parents);
+            // console.log("via: ", via);
+            // console.log("via_source_from: ", via_source_from);
+            // console.log("via_source_to: ", via_source_to);
+            // console.log("custom_fields: ", custom_fields);
+            // console.log("fields: ", fields);
             
-        //     if(nextPage){
-        //         currentPageNumber = Number(nextPage.substring(nextPage.indexOf('=')+1));
-        //     }
+            if(nextPage){
+                currentPageNumber = Number(nextPage.substring(nextPage.indexOf('=')+1));
+            }
             
-        //     nextPage = JSON.parse(body).next_page;
+            nextPage = JSON.parse(body).next_page;
             
-        //     if(nextPage) {
-        //         currentPageNumber = Number(nextPage.substring(nextPage.indexOf('=')+1)-1);
-        //         options.uri = nextPage;
-        //         main(objectName, callback);
-        //         callback(1);
-        //     } else {
-        //         callback(1);
-        //     }
+            if(nextPage) {
+                currentPageNumber = Number(nextPage.substring(nextPage.indexOf('=')+1)-1);
+                options.uri = nextPage;
+                main(objectName, callback);
+                callback(1);
+            } else {
+                callback(1);
+            }
 
-        //     console.log('Finished processing page ' + currentPageNumber + ' of ' + objectName);
+            console.log('Finished processing page ' + currentPageNumber + ' of ' + objectName);
 
         } else {
 
@@ -112,6 +113,118 @@ function splitData(){
         delete parents[key].fields;
     });
 }
+
+
+
+
+
+
+
+
+function transform(records, allowed = {}, add = {}) {
+
+    const final = {};
+    Object.keys(allowed).forEach( key => final[key] = [] );
+
+    records.forEach( record => {
+
+        const add_prop = {};
+        Object.keys(add).forEach( key => add_prop[key] = _.property(add[key])(record) )
+
+        Object.keys(final).forEach( key => {
+
+            current_prop = _.property(allowed[key])(record);
+
+            if (current_prop instanceof Array) {
+
+                final[key] = [
+                    ...final[key],
+                    ...current_prop.map( o => Object.assign({}, add_prop, o) )
+                ];
+            }
+            else if (typeof current_prop === "string"){
+
+                const obj_key = allowed[key].split('.').pop();
+                final[key] = [ ...final[key], Object.assign({}, add_prop, { [obj_key]: current_prop}) ];
+            }
+            else {
+
+                final[key] = [ ...final[key], Object.assign({}, add_prop, current_prop) ];
+            }
+
+        });
+
+    });
+
+    return final;
+}
+
+function getChildren(requests){
+    var obj = {};
+    var objKey, objValue;
+
+    function testInner(object, objKey, objValue){
+        _.forIn(object, (value, key) => {
+            var oKey = objKey + '_' + key;
+            var oValue = objValue + '.' + key;
+            if(value instanceof Object && value != null) {
+                if(!(oKey in obj)){
+                    obj[oKey] = oValue;
+                }
+            } else if (value != null){
+                if(!(oKey in obj)){
+                    obj[objKey] = oValue;
+                }
+            }
+        })
+        return 
+    }
+    
+    _.forIn(requests, (value,key) => {
+       _.forIn(value, (value, key) =>{
+            // var one, two;
+
+            if(value instanceof Array && value != []){
+                if(!(key in obj)){
+                    obj[key] = key;
+                }
+            } else if(value instanceof Object && value != null) {
+                objKey = key;
+                objValue = key;
+                _.forIn(value, (value, key) => {
+                    if(value instanceof Object && value != null) {
+                        objKey += '_' + key;
+                        objValue += '.' + key;
+                        testInner(value, objKey, objValue);
+                        // _.forIn(value, (value, key) => {
+                        //     if(typeof(value) == 'object' && value != null) {
+                        //         if(!(one + '_' + two + '_' + key in obj)){
+                        //             obj[one + '_' + two + '_' + key] = one + '.' + two + '.' + key;
+                        //         }
+                        //     }
+                        // })
+                    } else if (value != null){
+                        if(!(objKey in obj)){
+                            obj[objKey] = objValue;
+                        }
+                    } else {
+
+                    }
+                })
+            }
+        });
+    })
+
+    return obj;
+}
+
+
+
+
+
+
+
+
 
 var name;
 
@@ -169,7 +282,7 @@ function prepareData(json, tableName){
         var len = found.len > 5000 ? 8000 :
             found.len > 1000 ? 5000 :
             found.len > 255 ? 1000 : 255;
-        table.columns.add(name, sql.VarChar(len), {nullable: true})
+        table.columns.add(name, sql.varChar(len), {nullable: true})
 
     });
 
